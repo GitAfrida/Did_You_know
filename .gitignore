@@ -1,0 +1,53 @@
+# Visual Studio / VS Code
+.vs/
+*.sln
+*.slnx
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.VC.db
+*.opendb
+*.ipch
+*.code-workspace
+.vscode/
+.idea/
+.vsconfig
+
+# Unreal Engine build & cache directories
+Binaries/
+DerivedDataCache/
+Intermediate/
+Saved/
+Build/
+**/Binaries/
+**/DerivedDataCache/
+**/Intermediate/
+**/Saved/
+**/Build/
+
+# Unreal Engine Editor user folders
+Collections/
+Developers/
+**/Content/Collections/
+**/Content/Developers/
+**/Content/__ExternalActors__/
+**/Content/__ExternalObjects__/
+
+# Crash dumps & logs
+*.log
+*.dmp
+*.crash
+
+# OS files
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# IDE and agent files
+.agents/
+**/.agents/
+AGENTS.md
+GEMINI.md
+.mcp.json
+**/.mcp.json
