@@ -31,14 +31,22 @@ void AHorrorInspectable::BeginPlay()
 		MeshComponent->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
 		MeshComponent->SetCollisionResponseToChannel(ECC_Camera, ECR_Block);
 
-		// If no mesh is assigned, provide a default 3D model: wrench/tool for pickups, paper document for clues
+		// If no mesh is assigned, provide a default 3D model
 		if (!MeshComponent->GetStaticMesh())
 		{
-			const TCHAR* FallbackPath = bIsPickup
-				? TEXT("/Game/MafiaBarnPack/Meshes/Props/Tools/SM_Wrench.SM_Wrench")
-				: TEXT("/Game/MafiaBarnPack/Meshes/Props/Paper/SM_PhotoPlane1.SM_PhotoPlane1");
+			const TCHAR* PrimaryPath = bIsPickup
+				? TEXT("/Game/LivingRoom/Meshes/SM_Keys_01a.SM_Keys_01a")
+				: TEXT("/Game/LivingRoom/Meshes/SM_Portrait_01a.SM_Portrait_01a");
 
-			UStaticMesh* DefaultMesh = LoadObject<UStaticMesh>(nullptr, FallbackPath);
+			UStaticMesh* DefaultMesh = LoadObject<UStaticMesh>(nullptr, PrimaryPath);
+			if (!DefaultMesh)
+			{
+				const TCHAR* FallbackPath = bIsPickup
+					? TEXT("/Game/MafiaBarnPack/Meshes/Props/Tools/SM_Wrench.SM_Wrench")
+					: TEXT("/Game/MafiaBarnPack/Meshes/Props/Paper/SM_PhotoPlane1.SM_PhotoPlane1");
+				DefaultMesh = LoadObject<UStaticMesh>(nullptr, FallbackPath);
+			}
+
 			if (DefaultMesh)
 			{
 				MeshComponent->SetStaticMesh(DefaultMesh);
