@@ -7,28 +7,87 @@
 #include "Engine/World.h"
 #include "TimerManager.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/PlayerController.h"
 #include "Camera/CameraComponent.h"
 #include "Components/SpotLightComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "EnhancedInputComponent.h"
 #include "InputAction.h"
+#include "Kismet/GameplayStatics.h"
+#include "Sound/SoundBase.h"
+#include "Sound/SoundAttenuation.h"
+#include "UObject/ConstructorHelpers.h"
+#include "Animation/AnimInstance.h"
 
 AHorrorCharacter::AHorrorCharacter()
 {
 	PrimaryActorTick.bCanEverTick = true;
 
-	// create the spotlight - aligned straight forward with player's first-person gaze
-	SpotLight = CreateDefaultSubobject<USpotLightComponent>(TEXT("SpotLight"));
-	SpotLight->SetupAttachment(GetFirstPersonCameraComponent());
+	// 1. Create Flashlight Mesh attached to first-person left hand
+	FlashlightMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("FlashlightMesh"));
+	FlashlightMesh->SetupAttachment(GetFirstPersonMesh(), FName("FlashLight"));
+	FlashlightMesh->SetRelativeLocationAndRotation(FVector::ZeroVector, FRotator::ZeroRotator);
+	FlashlightMesh->SetRelativeScale3D(FVector(1.0f));
+	FlashlightMesh->SetCollisionProfileName(FName("NoCollision"));
+	FlashlightMesh->SetCastShadow(false);
+	FlashlightMesh->FirstPersonPrimitiveType = EFirstPersonPrimitiveType::FirstPerson;
+	FlashlightMesh->SetOnlyOwnerSee(true);
+	FlashlightMesh->SetVisibility(false); // Default: unequipped / hidden
 
-	SpotLight->SetRelativeLocationAndRotation(FVector(20.0f, 0.0f, -10.0f), FRotator::ZeroRotator);
-	SpotLight->Intensity = 12000.0f;
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> FlashlightMeshAsset(
+		TEXT("/Game/FlashLight_System/Mesh/SK_Flashlight.SK_Flashlight")
+	);
+	if (FlashlightMeshAsset.Succeeded())
+	{
+		FlashlightMesh->SetStaticMesh(FlashlightMeshAsset.Object);
+	}
+
+	// 2. Create SpotLight attached to the physical flashlight mesh lens
+	SpotLight = CreateDefaultSubobject<USpotLightComponent>(TEXT("SpotLight"));
+	SpotLight->SetupAttachment(FlashlightMesh);
+	SpotLight->SetRelativeLocationAndRotation(SpotLightRelativeLocation, FRotator(90.0f, 0.0f, 0.0f));
+	SpotLight->Intensity = BaseLightIntensity;
 	SpotLight->SetIntensityUnits(ELightUnits::Lumens);
 	SpotLight->AttenuationRadius = 3500.0f;
 	SpotLight->InnerConeAngle = 18.0f;
 	SpotLight->OuterConeAngle = 36.0f;
-	SpotLight->SetVisibility(false); // Starts OFF so player controls when to turn it on with F
+	SpotLight->SetVisibility(false); // Starts OFF
 
-	// create interaction and investigation components
+	// 3. Audio Assets
+	static ConstructorHelpers::FObjectFinder<USoundBase> OnSoundObj(
+		TEXT("/Game/FlashLight_System/Sound/Flashlight_On.Flashlight_On")
+	);
+	if (OnSoundObj.Succeeded())
+	{
+		FlashlightOnSound = OnSoundObj.Object;
+	}
+
+	static ConstructorHelpers::FObjectFinder<USoundBase> OffSoundObj(
+		TEXT("/Game/FlashLight_System/Sound/Flashlight_OFF.Flashlight_OFF")
+	);
+	if (OffSoundObj.Succeeded())
+	{
+		FlashlightOffSound = OffSoundObj.Object;
+	}
+
+	static ConstructorHelpers::FObjectFinder<USoundAttenuation> AttenuationObj(
+		TEXT("/Game/FlashLight_System/Sound/Att_FlashLight.Att_FlashLight")
+	);
+	if (AttenuationObj.Succeeded())
+	{
+		FlashlightAttenuation = AttenuationObj.Object;
+	}
+
+	static ConstructorHelpers::FObjectFinder<USoundBase> FlickerSoundObj(
+		TEXT("/Game/FlashLight_System/Sound/LightFlicker02.LightFlicker02")
+	);
+	if (FlickerSoundObj.Succeeded())
+	{
+		LightFlickerSound = FlickerSoundObj.Object;
+	}
+
+	// 4. Create interaction and investigation components
 	InteractionComponent = CreateDefaultSubobject<UHorrorInteractionComponent>(TEXT("InteractionComponent"));
 	InventoryComponent = CreateDefaultSubobject<UHorrorInventoryComponent>(TEXT("InventoryComponent"));
 }
@@ -46,13 +105,49 @@ void AHorrorCharacter::BeginPlay()
 	// start the sprint tick timer
 	GetWorld()->GetTimerManager().SetTimer(SprintTimer, this, &AHorrorCharacter::SprintFixedTick, SprintFixedTickTime, true);
 
-	// Ensure the flashlight is attached directly to the first-person camera, points straight forward, and starts OFF
-	if (SpotLight && GetFirstPersonCameraComponent())
+	// Ensure third-person body mesh ticks even when not rendered so CopyPoseFromMesh receives full locomotion updates
+	if (GetMesh())
 	{
-		SpotLight->AttachToComponent(GetFirstPersonCameraComponent(), FAttachmentTransformRules::SnapToTargetNotIncludingScale);
-		SpotLight->SetRelativeLocationAndRotation(FVector(20.0f, 0.0f, -10.0f), FRotator::ZeroRotator);
+		GetMesh()->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
+	}
+
+	// Ensure FP arms mesh ticks after parent body mesh and updates pose reliably
+	if (GetFirstPersonMesh())
+	{
+		GetFirstPersonMesh()->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::AlwaysTickPoseAndRefreshBones;
+		GetFirstPersonMesh()->AddTickPrerequisiteComponent(GetMesh());
+	}
+
+	// Ensure flashlight mesh is correctly snapped to left hand socket and starts HIDDEN
+	if (FlashlightMesh && GetFirstPersonMesh())
+	{
+		if (GetFirstPersonMesh()->DoesSocketExist(TEXT("FlashLight")))
+		{
+			FlashlightMesh->AttachToComponent(GetFirstPersonMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, TEXT("FlashLight"));
+			FlashlightMesh->SetRelativeLocationAndRotation(FVector::ZeroVector, FRotator::ZeroRotator);
+			FlashlightMesh->SetRelativeScale3D(FVector(1.0f));
+		}
+		else
+		{
+			FlashlightMesh->AttachToComponent(GetFirstPersonMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, TEXT("hand_l"));
+			FlashlightMesh->SetRelativeLocationAndRotation(FlashlightGripLocation, FlashlightGripRotation);
+			FlashlightMesh->SetRelativeScale3D(FlashlightMeshScale);
+		}
+		FlashlightMesh->SetOnlyOwnerSee(true);
+		FlashlightMesh->SetVisibility(false);
+	}
+
+	// Ensure spotlight is attached to flashlight mesh lens and starts OFF
+	if (SpotLight && FlashlightMesh)
+	{
+		SpotLight->AttachToComponent(FlashlightMesh, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+		SpotLight->SetRelativeLocationAndRotation(SpotLightRelativeLocation, FRotator(90.0f, 0.0f, 0.0f));
+		SpotLight->SetIntensity(BaseLightIntensity);
 		SpotLight->SetVisibility(false);
 	}
+
+	bFlashlightOn = false;
+	CurrentFlashlightAlpha = 0.0f;
 
 	if (GEngine)
 	{
@@ -61,11 +156,62 @@ void AHorrorCharacter::BeginPlay()
 	}
 }
 
+float AHorrorCharacter::GetFlashlightAimPitch() const
+{
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		return FMath::Clamp(FRotator::NormalizeAxis(PC->GetControlRotation().Pitch), -85.0f, 85.0f);
+	}
+	return 0.0f;
+}
+
 void AHorrorCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	// Direct hardware key polling: guarantees F (flashlight), E (interact), and Tab/N (notebook)
+	// 1. Smoothly interpolate CurrentFlashlightAlpha [0..1] for raising/lowering the arm
+	const float TargetAlpha = bFlashlightOn ? 1.0f : 0.0f;
+	CurrentFlashlightAlpha = FMath::FInterpTo(CurrentFlashlightAlpha, TargetAlpha, DeltaTime, FlashlightRaiseInterpSpeed);
+
+	// 2. Control mesh visibility: visible when equipped, hidden when unequipped
+	const bool bShouldShowMesh = bFlashlightOn || (CurrentFlashlightAlpha > 0.02f);
+	if (FlashlightMesh && FlashlightMesh->IsVisible() != bShouldShowMesh)
+	{
+		FlashlightMesh->SetVisibility(bShouldShowMesh);
+	}
+
+	// 3. Keep first-person AnimInstance synchronized with active state and camera pitch
+	if (USkeletalMeshComponent* FPMesh = GetFirstPersonMesh())
+	{
+		if (UAnimInstance* AnimInst = FPMesh->GetAnimInstance())
+		{
+			UClass* AnimClass = AnimInst->GetClass();
+
+			auto SetNumericProp = [AnimInst, AnimClass](const FName& PropName, double Val)
+			{
+				if (FProperty* Prop = AnimClass->FindPropertyByName(PropName))
+				{
+					if (FNumericProperty* NumProp = CastField<FNumericProperty>(Prop))
+					{
+						NumProp->SetFloatingPointPropertyValue(Prop->ContainerPtrToValuePtr<void>(AnimInst), Val);
+					}
+				}
+			};
+
+			SetNumericProp(TEXT("FlashlightAlpha"), CurrentFlashlightAlpha);
+
+			if (FBoolProperty* ActiveProp = CastField<FBoolProperty>(AnimClass->FindPropertyByName(TEXT("FlashlightPoseActive"))))
+			{
+				ActiveProp->SetPropertyValue_InContainer(AnimInst, bFlashlightOn);
+			}
+
+			const float Pitch = GetFlashlightAimPitch();
+			SetNumericProp(TEXT("FlashlightAimY"), Pitch);
+			SetNumericProp(TEXT("FlashlightAimX"), 0.0);
+		}
+	}
+
+	// 4. Direct hardware key polling: guarantees F (flashlight), E (interact), and Tab/N (notebook)
 	// always work 100% reliably regardless of Enhanced Input asset mapping state
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
 	{
@@ -90,8 +236,9 @@ void AHorrorCharacter::EndPlay(EEndPlayReason::Type EndPlayReason)
 {
 	Super::EndPlay(EndPlayReason);
 
-	// clear the sprint timer
+	// clear sprint and flicker timers
 	GetWorld()->GetTimerManager().ClearTimer(SprintTimer);
+	GetWorld()->GetTimerManager().ClearTimer(FlickerTimer);
 }
 
 void AHorrorCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -161,16 +308,87 @@ void AHorrorCharacter::DoToggleFlashlight()
 	}
 	GLastFlashlightToggleTime = CurrentTime;
 
+	SetFlashlightEquipped(!bFlashlightOn, true);
+}
+
+void AHorrorCharacter::SetFlashlightEquipped(bool bEquip, bool bPlaySound)
+{
+	bFlashlightOn = bEquip;
+
 	if (SpotLight)
 	{
-		const bool bNewVisibility = !SpotLight->IsVisible();
-		SpotLight->SetVisibility(bNewVisibility);
+		SpotLight->SetVisibility(bFlashlightOn);
+		SpotLight->SetIntensity(bFlashlightOn ? BaseLightIntensity : 0.0f);
+	}
 
-		if (GEngine)
+	if (FlashlightMesh && bFlashlightOn)
+	{
+		FlashlightMesh->SetVisibility(true);
+	}
+
+	if (bPlaySound)
+	{
+		USoundBase* SoundToPlay = bFlashlightOn ? FlashlightOnSound.Get() : FlashlightOffSound.Get();
+		if (SoundToPlay)
 		{
-			GEngine->AddOnScreenDebugMessage(2001, 3.0f, bNewVisibility ? FColor::Yellow : FColor::Silver, FString::Printf(TEXT("[FLASHLIGHT: %s]"), bNewVisibility ? TEXT("ON") : TEXT("OFF")));
+			UGameplayStatics::PlaySoundAtLocation(
+				this,
+				SoundToPlay,
+				GetActorLocation(),
+				1.0f,
+				1.0f,
+				0.0f,
+				FlashlightAttenuation
+			);
 		}
 	}
+
+	OnFlashlightToggled.Broadcast(bFlashlightOn);
+
+	if (GEngine)
+	{
+		GEngine->AddOnScreenDebugMessage(2001, 2.5f, bFlashlightOn ? FColor::Yellow : FColor::Silver,
+			FString::Printf(TEXT("[FLASHLIGHT: %s]"), bFlashlightOn ? TEXT("EQUIPPED (ON)") : TEXT("UNEQUIPPED (OFF)")));
+	}
+}
+
+void AHorrorCharacter::TriggerFlashlightFlicker(float Duration, int32 FlickerCount, bool bTurnOffAfter)
+{
+	if (!GetWorld() || FlickerCount <= 0)
+	{
+		return;
+	}
+
+	RemainingFlickerSteps = FlickerCount * 2;
+	bFlickerTurnOffAtEnd = bTurnOffAfter;
+
+	if (LightFlickerSound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, LightFlickerSound, GetActorLocation(), 1.0f, 1.0f, 0.0f, FlashlightAttenuation);
+	}
+
+	const float StepInterval = FMath::Max(Duration / static_cast<float>(RemainingFlickerSteps), 0.04f);
+	GetWorld()->GetTimerManager().SetTimer(
+		FlickerTimer,
+		[this]()
+		{
+			if (RemainingFlickerSteps <= 0)
+			{
+				GetWorld()->GetTimerManager().ClearTimer(FlickerTimer);
+				SetFlashlightEquipped(!bFlickerTurnOffAtEnd, false);
+				return;
+			}
+
+			if (SpotLight)
+			{
+				const bool bStepVisible = (RemainingFlickerSteps % 2 == 0);
+				SpotLight->SetVisibility(bStepVisible);
+			}
+			--RemainingFlickerSteps;
+		},
+		StepInterval,
+		true
+	);
 }
 
 void AHorrorCharacter::DoToggleNotebook()

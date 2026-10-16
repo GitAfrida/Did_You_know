@@ -51,3 +51,17 @@ AGENTS.md
 GEMINI.md
 .mcp.json
 **/.mcp.json
+.gemini/
+
+# Scratch & temporary files
+__pycache__/
+*.pyc
+unreal_mcp.py
+inspect_flashlight_assets.py
+flashlight_asset_details.txt
+horror_mansion.mtl
+horror_mansion.obj
+
+# Large unused duplicates & starter assets
+**/Content/StarterContent/
+**/Content/FlashLight_System/Blueprints/Character/
