@@ -29,6 +29,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Horror|Puzzle")
 	void ResetPuzzleRoom();
 
+	/** Wire doors dynamically if spawned via code or procedural builder */
+	UFUNCTION(BlueprintCallable, Category = "Horror|Puzzle")
+	void ConfigureDoors(AHorrorDoor* InLeft, AHorrorDoor* InMiddle, AHorrorDoor* InRight, AHorrorDoor* InEntry = nullptr);
+
 	/** Triggers the death jumpscare and death screen sequence */
 	UFUNCTION(BlueprintCallable, Category = "Horror|Puzzle")
 	void TriggerDeathTrap();

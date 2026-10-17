@@ -148,6 +148,11 @@ void AHorrorInspectable::Interact_Implementation(AHorrorCharacter* Interactor)
 	if (UHorrorInventoryComponent* InvComp = Interactor->FindComponentByClass<UHorrorInventoryComponent>())
 	{
 		InvComp->RecordMilaFact(FactIdToUse, QuoteToUse, DeductionToUse);
+
+		if (!DocumentData.DocumentId.IsNone() || !DocumentData.Title.IsEmpty())
+		{
+			InvComp->AddDocument(DocumentData);
+		}
 	}
 
 	// Display prominent on-screen text for the player

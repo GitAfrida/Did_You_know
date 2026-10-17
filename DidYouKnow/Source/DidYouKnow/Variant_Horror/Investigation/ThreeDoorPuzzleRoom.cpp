@@ -16,6 +16,31 @@ AThreeDoorPuzzleRoom::AThreeDoorPuzzleRoom()
 	EntryTrigger = CreateDefaultSubobject<UBoxComponent>(TEXT("EntryTrigger"));
 	RootComponent = EntryTrigger;
 	EntryTrigger->SetCollisionProfileName(TEXT("Trigger"));
+	EntryTrigger->SetBoxExtent(FVector(300.0f, 300.0f, 150.0f));
+}
+
+void AThreeDoorPuzzleRoom::ConfigureDoors(AHorrorDoor* InLeft, AHorrorDoor* InMiddle, AHorrorDoor* InRight, AHorrorDoor* InEntry)
+{
+	LeftDoor = InLeft;
+	MiddleDoor = InMiddle;
+	RightDoor = InRight;
+	EntryDoor = InEntry;
+
+	if (MiddleDoor)
+	{
+		MiddleDoor->OnDoorStateChanged.RemoveDynamic(this, &AThreeDoorPuzzleRoom::OnDoorStateChanged);
+		MiddleDoor->OnDoorStateChanged.AddDynamic(this, &AThreeDoorPuzzleRoom::OnDoorStateChanged);
+	}
+	if (LeftDoor)
+	{
+		LeftDoor->OnDoorStateChanged.RemoveDynamic(this, &AThreeDoorPuzzleRoom::OnDoorStateChanged);
+		LeftDoor->OnDoorStateChanged.AddDynamic(this, &AThreeDoorPuzzleRoom::OnDoorStateChanged);
+	}
+	if (RightDoor)
+	{
+		RightDoor->OnDoorStateChanged.RemoveDynamic(this, &AThreeDoorPuzzleRoom::OnDoorStateChanged);
+		RightDoor->OnDoorStateChanged.AddDynamic(this, &AThreeDoorPuzzleRoom::OnDoorStateChanged);
+	}
 }
 
 void AThreeDoorPuzzleRoom::BeginPlay()
@@ -24,17 +49,20 @@ void AThreeDoorPuzzleRoom::BeginPlay()
 
 	EntryTrigger->OnComponentBeginOverlap.AddDynamic(this, &AThreeDoorPuzzleRoom::OnEntryOverlap);
 
-	// Setup door listeners
+	// Setup door listeners for doors assigned via editor details
 	if (MiddleDoor)
 	{
+		MiddleDoor->OnDoorStateChanged.RemoveDynamic(this, &AThreeDoorPuzzleRoom::OnDoorStateChanged);
 		MiddleDoor->OnDoorStateChanged.AddDynamic(this, &AThreeDoorPuzzleRoom::OnDoorStateChanged);
 	}
 	if (LeftDoor)
 	{
+		LeftDoor->OnDoorStateChanged.RemoveDynamic(this, &AThreeDoorPuzzleRoom::OnDoorStateChanged);
 		LeftDoor->OnDoorStateChanged.AddDynamic(this, &AThreeDoorPuzzleRoom::OnDoorStateChanged);
 	}
 	if (RightDoor)
 	{
+		RightDoor->OnDoorStateChanged.RemoveDynamic(this, &AThreeDoorPuzzleRoom::OnDoorStateChanged);
 		RightDoor->OnDoorStateChanged.AddDynamic(this, &AThreeDoorPuzzleRoom::OnDoorStateChanged);
 	}
 }

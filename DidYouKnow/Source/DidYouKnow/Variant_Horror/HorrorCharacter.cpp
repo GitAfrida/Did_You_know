@@ -205,8 +205,9 @@ void AHorrorCharacter::Tick(float DeltaTime)
 				ActiveProp->SetPropertyValue_InContainer(AnimInst, bFlashlightOn);
 			}
 
-			const float Pitch = GetFlashlightAimPitch();
-			SetNumericProp(TEXT("FlashlightAimY"), Pitch);
+			const float CameraPitch = GetFlashlightAimPitch();
+			const float BiasedPitch = FMath::Clamp(CameraPitch * 0.45f - 30.0f, -75.0f, 10.0f);
+			SetNumericProp(TEXT("FlashlightAimY"), BiasedPitch);
 			SetNumericProp(TEXT("FlashlightAimX"), 0.0);
 		}
 	}

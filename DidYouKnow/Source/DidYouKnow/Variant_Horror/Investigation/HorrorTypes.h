@@ -76,6 +76,18 @@ struct FInvestigationDocument
 	/** Has this document been collected and placed in the notebook? */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Investigation|Document")
 	bool bIsCollected = false;
+
+	/** If true, this item (such as a photograph) has a back side that can be flipped */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Investigation|Document")
+	bool bHasReverseSide = false;
+
+	/** Text or handwritten note on the back side (e.g. "He never noticed the second key") */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Investigation|Document", meta = (EditCondition = "bHasReverseSide"))
+	FText ReverseSideContent;
+
+	/** Optional graphic/texture for the reverse side */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Investigation|Document", meta = (EditCondition = "bHasReverseSide"))
+	TObjectPtr<UTexture2D> ReverseSideTexture = nullptr;
 };
 
 /**
