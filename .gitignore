@@ -64,4 +64,10 @@ horror_mansion.obj
 
 # Large unused duplicates & starter assets
 **/Content/StarterContent/
-**/Content/FlashLight_System/Blueprints/Character/
+**/Content/FlashLight_System/Blueprints/
+**/Content/FlashLight_System/Demo/
+**/Content/FlashLight_System/Input/
+**/Content/FlashLight_System/WB/
+**/Content/FlashLight_System/Animations/*.uasset
+**/Content/FlashLight_System/Animations/*.FBX
+!**/Content/FlashLight_System/Animations/FlashLightAnimation/
